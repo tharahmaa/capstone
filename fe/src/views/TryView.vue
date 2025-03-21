@@ -29,8 +29,26 @@
           <img :src="capturedImage" alt="Captured selfie" class="captured-image" />
         </div>
         
+        <!-- Timer overlay -->
+        <div v-if="timerActive" class="timer-overlay">
+          <div class="timer-count">{{ timerCount }}</div>
+        </div>
+        
         <div v-if="cameraActive || capturedImage" class="camera-controls">
-          <button v-if="cameraActive && !capturedImage" @click="capturePhoto" class="capture-btn">
+          <!-- Timer options when camera is active but no photo is captured yet -->
+          <div v-if="cameraActive && !capturedImage" class="timer-options">
+            <button @click="capturePhoto(0)" class="timer-btn" :class="{ active: selectedTimer === 0 }">
+              No Timer
+            </button>
+            <button @click="capturePhoto(3)" class="timer-btn" :class="{ active: selectedTimer === 3 }">
+              3s
+            </button>
+            <button @click="capturePhoto(5)" class="timer-btn" :class="{ active: selectedTimer === 5 }">
+              5s
+            </button>
+          </div>
+          
+          <button v-if="cameraActive && !capturedImage && !timerActive" @click="capturePhoto(selectedTimer)" class="capture-btn">
             <span class="camera-icon">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"></circle>
@@ -41,6 +59,7 @@
           <div v-if="capturedImage" class="action-buttons">
             <button @click="savePhoto" class="save-btn">Save Photo</button>
             <button @click="retakePhoto" class="retake-btn">Retake</button>
+            <button @click="viewGallery" class="view-btn">View Gallery</button>
           </div>
         </div>
         
@@ -51,107 +70,29 @@
         <canvas ref="canvasElement" style="display:none"></canvas>
       </div>
     </div>
-    
-    <div class="info-section">
-      <div class="saved-photos" v-if="savedPhotos.length > 0">
-        <h2>Your Saved Photos</h2>
-        <div class="photo-grid">
-          <div 
-            v-for="(photo, index) in savedPhotos" 
-            :key="index" 
-            class="photo-item"
-          >
-            <img :src="photo.image" alt="Saved photo" />
-            <div class="photo-actions">
-              <button @click="downloadPhoto(photo.image)" class="action-btn download-btn" title="Download">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="7 10 12 15 17 10"></polyline>
-                  <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
-              </button>
-              <button @click="showShareDialog(photo)" class="action-btn share-btn" title="Share">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="18" cy="5" r="3"></circle>
-                  <circle cx="6" cy="12" r="3"></circle>
-                  <circle cx="18" cy="19" r="3"></circle>
-                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-                </svg>
-              </button>
-              <button @click="confirmDeletePhoto(photo.id)" class="action-btn delete-btn" title="Delete">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Share Dialog -->
-    <div v-if="showShare" class="share-dialog-overlay" @click="closeShareDialog">
-      <div class="share-dialog" @click.stop>
-        <h3>Share Photo</h3>
-        <div class="qr-code-container">
-          <div ref="qrCodeElement"></div>
-        </div>
-        <div class="share-link">
-          <input type="text" ref="shareLink" :value="currentShareLink" readonly />
-          <button @click="copyShareLink" class="copy-btn">
-            <span v-if="!copied">Copy</span>
-            <span v-else>Copied!</span>
-          </button>
-        </div>
-        <div class="share-actions">
-          <button @click="closeShareDialog" class="close-btn">Close</button>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Delete Confirmation Dialog -->
-    <div v-if="showDeleteConfirm" class="share-dialog-overlay" @click="cancelDelete">
-      <div class="share-dialog delete-dialog" @click.stop>
-        <h3>Delete Photo</h3>
-        <p>Are you sure you want to delete this photo? This action cannot be undone.</p>
-        <div class="delete-actions">
-          <button @click="deletePhoto" class="delete-confirm-btn">Delete</button>
-          <button @click="cancelDelete" class="cancel-btn">Cancel</button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
 
+const router = useRouter();
 const videoElement = ref(null);
 const canvasElement = ref(null);
 const cameraContainer = ref(null);
-const qrCodeElement = ref(null);
-const shareLink = ref(null);
 const cameraActive = ref(false);
 const capturedImage = ref(null);
 const loadingState = ref('');
-const savedPhotos = ref([]);
 const stream = ref(null);
-const showShare = ref(false);
-const currentShareLink = ref('');
-const copied = ref(false);
-const currentSharePhoto = ref(null);
-const showDeleteConfirm = ref(false);
-const photoToDeleteId = ref(null);
+const timerActive = ref(false);
+const timerCount = ref(0);
+const selectedTimer = ref(0); // Default to no timer
 
 // Generate a unique ID for each photo
 const generateUniqueId = () => {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 };
-
-// Base URL for sharing (in a real app, this would be your domain)
-const baseUrl = window.location.origin + '/share/';
 
 // Start camera
 const startCamera = async () => {
@@ -176,8 +117,32 @@ const startCamera = async () => {
   }
 };
 
-// Capture photo
-const capturePhoto = () => {
+// Capture photo with optional timer
+const capturePhoto = (seconds) => {
+  selectedTimer.value = seconds;
+  
+  if (seconds > 0 && !timerActive.value) {
+    // Start timer
+    timerActive.value = true;
+    timerCount.value = seconds;
+    
+    const timerInterval = setInterval(() => {
+      timerCount.value--;
+      
+      if (timerCount.value <= 0) {
+        clearInterval(timerInterval);
+        timerActive.value = false;
+        takePhoto();
+      }
+    }, 1000);
+  } else if (!timerActive.value) {
+    // Take photo immediately if no timer or timer already active
+    takePhoto();
+  }
+};
+
+// Actually take the photo
+const takePhoto = () => {
   const video = videoElement.value;
   const canvas = canvasElement.value;
   
@@ -230,16 +195,19 @@ const savePhoto = () => {
       // Save to localStorage
       localStorage.setItem('selfies', JSON.stringify(existingPhotos));
       
-      // Update local state
-      savedPhotos.value = existingPhotos;
-      
       loadingState.value = 'Photo saved successfully!';
       
-      // Clear loading state after 2 seconds
+      // Clear loading state after 2 seconds and ask if user wants to go to gallery
       setTimeout(() => {
         loadingState.value = '';
-        capturedImage.value = null;
-        startCamera();
+        
+        // Ask user if they want to view the gallery or take another photo
+        if (confirm('Photo saved! Would you like to view your gallery?')) {
+          viewGallery();
+        } else {
+          capturedImage.value = null;
+          startCamera();
+        }
       }, 2000);
     } catch (error) {
       console.error('Error saving photo:', error);
@@ -252,183 +220,13 @@ const savePhoto = () => {
   }, 1500);
 };
 
-// Load saved photos from localStorage
-const loadSavedPhotos = () => {
-  try {
-    const photos = JSON.parse(localStorage.getItem('selfies') || '[]');
-    // Handle legacy data format
-    savedPhotos.value = photos.map(photo => {
-      if (typeof photo === 'string') {
-        return {
-          id: generateUniqueId(),
-          image: photo,
-          timestamp: new Date().toISOString()
-        };
-      }
-      return photo;
-    });
-    
-    // Update localStorage with the new format if needed
-    if (photos.some(photo => typeof photo === 'string')) {
-      localStorage.setItem('selfies', JSON.stringify(savedPhotos.value));
-    }
-  } catch (error) {
-    console.error('Error loading saved photos:', error);
-  }
-};
-
-// Download photo
-const downloadPhoto = (imageUrl) => {
-  const link = document.createElement('a');
-  link.href = imageUrl;
-  link.download = `boothme-selfie-${new Date().getTime()}.png`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-};
-
-// Show share dialog
-const showShareDialog = async (photo) => {
-  currentSharePhoto.value = photo;
-  currentShareLink.value = `${baseUrl}${photo.id}`;
-  showShare.value = true;
-  copied.value = false;
-  
-  // Wait for the dialog to be rendered
-  await nextTick();
-  
-  // Generate QR code
-  if (qrCodeElement.value) {
-    // In a real app, you would import a QR code library like qrcode.js
-    // For this demo, we'll just simulate it
-    loadQRCodeLibrary().then(() => {
-      if (window.QRCode && qrCodeElement.value) {
-        qrCodeElement.value.innerHTML = '';
-        new window.QRCode(qrCodeElement.value, {
-          text: currentShareLink.value,
-          width: 200,
-          height: 200
-        });
-      }
-    });
-  }
-};
-
-// Close share dialog
-const closeShareDialog = () => {
-  showShare.value = false;
-  currentShareLink.value = '';
-  currentSharePhoto.value = null;
-};
-
-// Copy share link
-const copyShareLink = () => {
-  if (shareLink.value) {
-    shareLink.value.select();
-    document.execCommand('copy');
-    copied.value = true;
-    
-    setTimeout(() => {
-      copied.value = false;
-    }, 2000);
-  }
-};
-
-// Confirm delete photo
-const confirmDeletePhoto = (photoId) => {
-  photoToDeleteId.value = photoId;
-  showDeleteConfirm.value = true;
-};
-
-// Cancel delete
-const cancelDelete = () => {
-  photoToDeleteId.value = null;
-  showDeleteConfirm.value = false;
-};
-
-// Delete photo
-const deletePhoto = () => {
-  if (!photoToDeleteId.value) return;
-  
-  try {
-    // Get photos from localStorage
-    const photos = JSON.parse(localStorage.getItem('selfies') || '[]');
-    
-    // Filter out the photo to delete
-    const updatedPhotos = photos.filter(photo => {
-      if (typeof photo === 'string') return true; // Skip legacy format
-      return photo.id !== photoToDeleteId.value;
-    });
-    
-    // Save updated photos to localStorage
-    localStorage.setItem('selfies', JSON.stringify(updatedPhotos));
-    
-    // Update local state
-    savedPhotos.value = updatedPhotos;
-    
-    // Show success message
-    loadingState.value = 'Photo deleted successfully!';
-    setTimeout(() => {
-      loadingState.value = '';
-    }, 2000);
-    
-    // Close delete confirmation dialog
-    cancelDelete();
-  } catch (error) {
-    console.error('Error deleting photo:', error);
-    loadingState.value = 'Failed to delete photo.';
-    setTimeout(() => {
-      loadingState.value = '';
-    }, 2000);
-  }
-};
-
-// Load QR Code library (simulated for demo)
-const loadQRCodeLibrary = () => {
-  return new Promise((resolve) => {
-    // In a real app, you would load the library from CDN or include it in your project
-    // For this demo, we'll simulate it
-    if (!window.QRCode) {
-      window.QRCode = function(element, options) {
-        const container = element;
-        const canvas = document.createElement('canvas');
-        canvas.width = options.width;
-        canvas.height = options.height;
-        container.appendChild(canvas);
-        
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        // Draw a simulated QR code (just a visual representation)
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(10, 10, canvas.width - 20, canvas.height - 20);
-        
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(20, 20, canvas.width - 40, canvas.height - 40);
-        
-        ctx.fillStyle = '#000000';
-        // Draw some random squares to simulate a QR code pattern
-        for (let i = 0; i < 10; i++) {
-          for (let j = 0; j < 10; j++) {
-            if (Math.random() > 0.5) {
-              ctx.fillRect(30 + i * 14, 30 + j * 14, 10, 10);
-            }
-          }
-        }
-        
-        // Draw positioning squares
-        ctx.fillRect(30, 30, 40, 40);
-        ctx.fillRect(130, 30, 40, 40);
-        ctx.fillRect(30, 130, 40, 40);
-      };
-    }
-    resolve();
-  });
+// Navigate to gallery page
+const viewGallery = () => {
+  router.push('/gallery');
 };
 
 onMounted(() => {
-  loadSavedPhotos();
+  // No need to load saved photos here anymore as they're on a different page
 });
 
 onUnmounted(() => {
@@ -471,7 +269,6 @@ onUnmounted(() => {
   max-width: 800px;
   margin: 0 auto 2rem auto;
   align-items: center;
-  
 }
 
 .camera-container {
@@ -536,14 +333,72 @@ onUnmounted(() => {
   object-fit: cover;
 }
 
+/* Timer overlay */
+.timer-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.3);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 15;
+}
+
+.timer-count {
+  font-size: 6rem;
+  color: white;
+  font-weight: bold;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
 .camera-controls {
   position: absolute;
   bottom: 20px;
   left: 0;
   right: 0;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   z-index: 10;
+}
+
+.timer-options {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.timer-btn {
+  background-color: rgba(255, 255, 255, 0.7);
+  border: 1px solid #3b82f6;
+  border-radius: 15px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.timer-btn.active {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.timer-btn:hover {
+  background-color: rgba(59, 130, 246, 0.2);
+}
+
+.timer-btn.active:hover {
+  background-color: #2563eb;
 }
 
 .capture-btn {
@@ -578,7 +433,7 @@ onUnmounted(() => {
   justify-content: center;
 }
 
-.save-btn, .retake-btn {
+.save-btn, .retake-btn, .view-btn {
   padding: 0.5rem 1.5rem;
   border-radius: 5px;
   font-weight: 500;
@@ -598,6 +453,12 @@ onUnmounted(() => {
   border: 1px solid #1e3a8a;
 }
 
+.view-btn {
+  background-color: #10b981;
+  color: white;
+  border: none;
+}
+
 .loading-state {
   position: absolute;
   top: 50%;
@@ -611,206 +472,6 @@ onUnmounted(() => {
   z-index: 20;
 }
 
-.info-section {
-  width: 100%;
-  max-width: 1200px;
-  padding: 1rem;
-}
-
-.saved-photos {
-  margin-top: 2rem;
-}
-
-.saved-photos h2 {
-  font-size: 1.5rem;
-  color: #111827;
-  margin-bottom: 1rem;
-}
-
-.photo-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1rem;
-}
-
-.photo-item {
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  aspect-ratio: 1/1;
-  position: relative;
-}
-
-.photo-item img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.photo-actions {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  padding: 0.5rem;
-  gap: 1rem;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.photo-item:hover .photo-actions {
-  opacity: 1;
-}
-
-/* For touch devices, always show photo actions */
-@media (hover: none) {
-  .photo-actions {
-    opacity: 1;
-    background-color: rgba(0, 0, 0, 0.3);
-  }
-}
-
-.action-btn {
-  background-color: white;
-  color: #1e3a8a;
-  border: none;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: transform 0.2s;
-}
-
-.action-btn:hover {
-  transform: scale(1.1);
-}
-
-.delete-btn {
-  color: #ef4444;
-}
-
-/* Share Dialog */
-.share-dialog-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  padding: 1rem;
-}
-
-.share-dialog {
-  background-color: white;
-  padding: 1.5rem;
-  border-radius: 10px;
-  max-width: 90%;
-  width: 400px;
-  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
-}
-
-.share-dialog h3 {
-  margin-top: 0;
-  margin-bottom: 1.5rem;
-  font-size: 1.5rem;
-  color: #111827;
-  text-align: center;
-}
-
-.qr-code-container {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 1.5rem;
-  max-width: 100%;
-  overflow: hidden;
-}
-
-.qr-code-container img {
-  max-width: 100%;
-  height: auto;
-}
-
-.share-link {
-  display: flex;
-  margin-bottom: 1.5rem;
-  flex-wrap: wrap;
-}
-
-.share-link input {
-  flex: 1;
-  padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 5px 0 0 5px;
-  font-size: 0.9rem;
-  min-width: 0; /* Allows the input to shrink below its content size */
-}
-
-.copy-btn {
-  background-color: #2563eb;
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 0 5px 5px 0;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.share-actions {
-  display: flex;
-  justify-content: center;
-}
-
-.close-btn {
-  background-color: #e5e7eb;
-  color: #111827;
-  border: none;
-  padding: 0.5rem 1.5rem;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
-/* Delete Dialog */
-.delete-dialog p {
-  text-align: center;
-  margin-bottom: 1.5rem;
-  color: #4b5563;
-}
-
-.delete-actions {
-  display: flex;
-  justify-content: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.delete-confirm-btn {
-  background-color: #ef4444;
-  color: white;
-  border: none;
-  padding: 0.5rem 1.5rem;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
-.cancel-btn {
-  background-color: #e5e7eb;
-  color: #111827;
-  border: none;
-  padding: 0.5rem 1.5rem;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
 /* Responsive styles */
 /* Tablet */
 @media (max-width: 1024px) {
@@ -821,10 +482,6 @@ onUnmounted(() => {
   .info-text {
     font-size: 1rem;
     max-width: 600px;
-  }
-  
-  .photo-grid {
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   }
 }
 
@@ -848,17 +505,12 @@ onUnmounted(() => {
     aspect-ratio: 4/3; /* Better aspect ratio for mobile */
   }
   
-  .photo-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 0.75rem;
-  }
-  
   .action-buttons {
     gap: 0.75rem;
   }
   
-  .share-dialog, .delete-dialog {
-    padding: 1.25rem;
+  .timer-count {
+    font-size: 5rem;
   }
 }
 
@@ -868,14 +520,9 @@ onUnmounted(() => {
     font-size: 1.5rem;
   }
   
-  .camera-btn, .save-btn, .retake-btn {
+  .camera-btn, .save-btn, .retake-btn, .view-btn {
     padding: 0.5rem 1.25rem;
     font-size: 0.9rem;
-  }
-  
-  .photo-grid {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 0.5rem;
   }
   
   .capture-btn {
@@ -883,32 +530,26 @@ onUnmounted(() => {
     height: 50px;
   }
   
-  .action-btn {
-    width: 32px;
-    height: 32px;
+  .timer-options {
+    flex-wrap: wrap;
   }
   
-  .share-link {
+  .timer-btn {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+  }
+  
+  .timer-count {
+    font-size: 4rem;
+  }
+  
+  .action-buttons {
     flex-direction: column;
-  }
-  
-  .share-link input {
-    border-radius: 5px;
-    margin-bottom: 0.5rem;
-    width: 100%;
-  }
-  
-  .copy-btn {
-    border-radius: 5px;
-    width: 100%;
-  }
-  
-  .delete-actions, .share-actions {
-    flex-direction: column;
+    width: 80%;
     gap: 0.5rem;
   }
   
-  .delete-confirm-btn, .cancel-btn, .close-btn {
+  .save-btn, .retake-btn, .view-btn {
     width: 100%;
   }
 }

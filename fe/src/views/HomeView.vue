@@ -45,8 +45,9 @@
 .content-wrapper {
   display: flex;
   width: 100%;
-  margin: 0 auto;
-  padding: 2rem 5%;
+  margin: 0; 
+  margin-left: 5%; 
+  padding: 2rem 0;
   position: relative;
   z-index: 2;
 }
@@ -55,7 +56,8 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  align-items: flex-start;
+  max-width: 600px;
   padding: 2rem 0;
 }
 

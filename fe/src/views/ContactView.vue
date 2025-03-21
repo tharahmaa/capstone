@@ -45,7 +45,6 @@
   <style>
         .contact-container {
             width:100%;
-            min-height: 100vh;
             position: relative;
             text-align: center;
             display: flex;
@@ -57,7 +56,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            width: 180%;
+            width: 100%;
             padding: 1rem 1rem;
             position: relative;
             z-index: 2;
@@ -89,7 +88,7 @@
         .team-section {
             display: flex;
             justify-content: space-around;
-            flex-wrap: nowrap;
+            flex-wrap: wrap;
             gap: 1rem;
             width: 100%;
             position: relative;
@@ -161,7 +160,7 @@
             z-index: 0;
         }
 
-        @media (max-width: 768px) {
+        /* @media (max-width: 768px) {
             h1 {
                 font-size: 2.5rem;
             }
@@ -178,5 +177,5 @@
                 width: 150px;
                 height: 150px;
             }
-        }
+        } */
     </style>
