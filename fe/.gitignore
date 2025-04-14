@@ -8,26 +8,34 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-.DS_Store
 dist
 dist-ssr
-coverage
 *.local
-
-/cypress/videos/
-/cypress/screenshots/
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
+.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-*.tsbuildinfo
+# Environment variables
+.env
+.env.*
+!.env.example
 
-test-results/
-playwright-report/
+# Testing
+/coverage
+/e2e/test-results/
+/e2e/playwright-report/
+/e2e/playwright/.cache/
+/e2e/playwright/trace/
+
+/cypress/videos/
+/cypress/screenshots/
+
+*.tsbuildinfo
