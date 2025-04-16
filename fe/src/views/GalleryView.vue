@@ -22,12 +22,20 @@
       </div>
     </div>
 
+    <!-- Loading Spinner -->
+    <div v-if="isLoading" class="loading-spinner">
+      <span>Loading...</span>
+      <div class="spinner"></div>
+    </div>
+
+    <!-- Collage Preview -->
     <div v-if="collagePreview" class="collage-preview">
       <h3>Collage Preview</h3>
       <img :src="collagePreview" alt="Collage" />
       <button @click="downloadCollage" class="download-btn">Download Collage</button>
     </div>
 
+    <!-- Hidden canvas for drawing the collage -->
     <canvas ref="canvasRef" style="display: none"></canvas>
   </div>
 </template>
@@ -35,12 +43,14 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 
-const savedPhotos = ref([])
-const selectedPhotos = ref([])
-const collagePreview = ref('')
-const canvasRef = ref(null)
-const selectAll = ref(false)
+const savedPhotos = ref([]) // Array to hold photos
+const selectedPhotos = ref([]) // Array to hold selected photos
+const collagePreview = ref('') // Data URL for the collage preview
+const canvasRef = ref(null) // Reference to the canvas for the collage
+const selectAll = ref(false) // Flag for "select all" checkbox
+const isLoading = ref(false) // Flag to show loading spinner
 
+// Load saved photos from localStorage
 const loadSavedPhotos = () => {
   try {
     const photos = JSON.parse(localStorage.getItem('selfies') || '[]')
@@ -52,19 +62,7 @@ const loadSavedPhotos = () => {
   }
 }
 
-const downloadCollage = () => {
-  if (!collagePreview.value) return
-
-  setTimeout(() => {
-    const link = document.createElement('a')
-    link.href = collagePreview.value
-    link.download = 'collage.png'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }, 0)
-}
-
+// Toggle select all functionality
 const toggleSelectAll = () => {
   if (selectAll.value) {
     selectedPhotos.value = [...savedPhotos.value]
@@ -73,131 +71,136 @@ const toggleSelectAll = () => {
   }
 }
 
+// Clear the selected photos
 const clearSelection = () => {
   selectedPhotos.value = []
   selectAll.value = false
 }
 
+// Watch for changes in selected photos and generate the collage
 watch(selectedPhotos, async (newVal) => {
   selectAll.value = newVal.length === savedPhotos.value.length && newVal.length > 0
   if (newVal.length > 0) {
-    await generateCollage()
+    await generateCollage() // Generate collage when selection changes
   } else {
-    collagePreview.value = ''
+    collagePreview.value = '' // Clear preview if no selection
   }
 })
 
+// Fetch base64 encoded image from the proxy server
 const getBase64FromProxy = async (imageUrl) => {
   try {
-    const proxyUrl = `http://localhost:3001/proxy-image?url=${encodeURIComponent(imageUrl)}`
+    const proxyUrl = `http://localhost:3000/proxy-image?url=${encodeURIComponent(imageUrl)}`
     const response = await fetch(proxyUrl)
-    const blob = await response.blob()
-
-    return await new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onloadend = () => resolve(reader.result)
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
-    })
+    const base64 = await response.text()
+    return base64
   } catch (err) {
     console.error('Proxy error:', err)
     return null
   }
 }
 
+// Generate the collage
 const generateCollage = async () => {
-  const images = []
-  const frameImage = new Image()
+  isLoading.value = true // Show loading spinner
 
-  // Tentukan ukuran tetap untuk kolase (5x15 cm dengan 300 DPI = 590x1770 piksel)
-  const collageWidth = 590 // 5 cm dalam piksel pada 300 DPI
-  const collageHeight = 1770 // 15 cm dalam piksel pada 300 DPI
+  const images = [] // Array to hold loaded images
+  const frameImage = new Image() // Background frame image
 
-  // Menggunakan bg.jpg sebagai background
-  frameImage.src = 'bg.jpg' // ubah sesuai path kalau perlu
+  const collageWidth = 590
+  const collageHeight = 1770
+
+  frameImage.src = 'bg.jpg'
   await new Promise((resolve) => {
     frameImage.onload = resolve
     frameImage.onerror = resolve
   })
 
-  // Proses foto
-  for (const photo of selectedPhotos.value) {
-    const base64 = await getBase64FromProxy(photo.image)
-    if (base64) {
-      const img = new Image()
-      img.src = base64
-      await new Promise((resolve) => {
-        img.onload = () => resolve()
-        img.onerror = () => resolve()
-      })
-      images.push(img)
-    }
+  // Load all images in parallel using Promise.all
+  const imagePromises = selectedPhotos.value.map((photo) =>
+    getBase64FromProxy(photo.image).then((base64) => {
+      if (base64) {
+        const img = new Image()
+        img.src = base64
+        return new Promise((resolve) => {
+          img.onload = () => resolve(img)
+          img.onerror = () => resolve(null) // Resolve even if there's an error
+        })
+      }
+    })
+  )
+
+  const loadedImages = await Promise.all(imagePromises)
+
+  // Filter out any failed image loading attempts
+  const validImages = loadedImages.filter((img) => img !== null)
+
+  if (!validImages.length || !frameImage.complete) {
+    isLoading.value = false // Hide loading spinner if no images are available
+    return
   }
 
-  if (!images.length || !frameImage.complete) return
-
+  // Drawing the collage on the canvas
   const canvas = canvasRef.value
   const ctx = canvas.getContext('2d')
-
-  // Set ukuran canvas sesuai dengan ukuran kolase yang diinginkan
   canvas.width = collageWidth
   canvas.height = collageHeight
   ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-  // Gambar background (bg.jpg) di canvas
   ctx.drawImage(frameImage, 0, 0, collageWidth, collageHeight)
 
-  // Tentukan padding dan ukuran foto
-  const photoPadding = 30 // padding antar foto
-  const photoSize = collageWidth * 0.8 // ukuran foto, sesuaikan dengan kebutuhan
+  const photoPadding = 30
+  const photoSize = collageWidth * 0.8
+  let currentY = 50
 
-  // Tempatkan foto secara vertikal
-  let currentY = 50 // Mulai dari posisi Y di atas
-  images.forEach((img, index) => {
-    // Tentukan posisi Y untuk setiap foto, menambahkan padding untuk setiap foto baru
-    const x = (collageWidth - photoSize) / 2 // Posisikan foto di tengah secara horizontal
+  // Draw each valid image on the canvas
+  validImages.forEach((img) => {
+    const x = (collageWidth - photoSize) / 2
     ctx.drawImage(img, x, currentY, photoSize, photoSize)
-
-    // Geser posisi Y ke bawah untuk foto berikutnya
     currentY += photoSize + photoPadding
   })
 
-  // Preview kolase kecil untuk layar
+  // Create a preview of the collage in a smaller canvas
   const previewCanvas = document.createElement('canvas')
   const previewCtx = previewCanvas.getContext('2d')
-  const previewWidth = 300 // Ukuran preview yang lebih kecil (misalnya 300px lebar)
-  const previewHeight = Math.floor((collageHeight / collageWidth) * previewWidth) // Sesuaikan rasio
+  const previewWidth = 300
+  const previewHeight = Math.floor((collageHeight / collageWidth) * previewWidth)
 
   previewCanvas.width = previewWidth
   previewCanvas.height = previewHeight
   previewCtx.drawImage(canvas, 0, 0, collageWidth, collageHeight, 0, 0, previewWidth, previewHeight)
 
-  collagePreview.value = previewCanvas.toDataURL('image/png') // Set preview ke gambar kecil
+  // Set the preview image source to the canvas data URL
+  collagePreview.value = previewCanvas.toDataURL('image/png')
 
-  // Fungsi untuk download
-  const downloadCollage = () => {
-    const link = document.createElement('a')
-    link.href = canvas.toDataURL('image/png') // Download dalam ukuran asli
-    link.download = 'collage.png'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
-  // Tampilkan tombol download
-  document.querySelector('.download-btn').addEventListener('click', downloadCollage)
+  isLoading.value = false // Hide loading spinner when done
 }
 
+
+// Download the collage as an image
+const downloadCollage = () => {
+  const canvas = canvasRef.value
+  const link = document.createElement('a')
+  link.href = canvas.toDataURL('image/png')
+  link.download = 'collage.png'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
+// Load photos when component is mounted
 onMounted(loadSavedPhotos)
 </script>
 
 <style scoped>
+/* Container styles */
 .gallery-container {
   padding: 1rem;
   max-width: 1200px;
   margin: auto;
 }
 
+/* Controls and photo grid styles */
 .controls {
   display: flex;
   gap: 1rem;
@@ -211,6 +214,7 @@ onMounted(loadSavedPhotos)
   gap: 1rem;
 }
 
+/* Individual photo item styles */
 .photo-item {
   position: relative;
   border-radius: 8px;
@@ -224,6 +228,7 @@ onMounted(loadSavedPhotos)
   object-fit: cover;
 }
 
+/* Download button styles */
 .download-btn {
   margin-top: 1rem;
   padding: 0.5rem 1.2rem;
@@ -240,6 +245,7 @@ onMounted(loadSavedPhotos)
   background-color: #4338ca;
 }
 
+/* Checkbox input styles */
 .photo-item input[type='checkbox'] {
   position: absolute;
   top: 8px;
@@ -252,6 +258,7 @@ onMounted(loadSavedPhotos)
   outline: 3px solid #4f46e5;
 }
 
+/* Collage preview styles */
 .collage-preview {
   margin-top: 2rem;
   text-align: center;
@@ -260,5 +267,32 @@ onMounted(loadSavedPhotos)
 .collage-preview img {
   max-width: 100%;
   border-radius: 8px;
+}
+
+/* Loading spinner styles */
+.loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #4f46e5;
+  margin-top: 20px;
+}
+
+.spinner {
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top: 4px solid #4f46e5;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  animation: spin 1s linear infinite;
+  margin-top: 10px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style>
