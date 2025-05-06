@@ -1,13 +1,17 @@
-// index.js
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
+const bodyParser = require('body-parser');  // Untuk meng-handle request body besar
 
 const app = express();
 const PORT = 3000;
 
-app.use(cors()); // Izinkan semua origin
+const CLIENT_ID = 'fabfda01b119459';  // Ganti dengan Client ID Imgur kamu
 
+app.use(cors());
+app.use(bodyParser.json({ limit: '10mb' }));  // Untuk menangani file gambar besar dalam base64
+
+// Route untuk proxy gambar (mendapatkan gambar dari URL dan mengubahnya menjadi base64)
 app.get('/proxy-image', async (req, res) => {
   const imageUrl = req.query.url;
   if (!imageUrl) {
@@ -28,6 +32,36 @@ app.get('/proxy-image', async (req, res) => {
     res.status(500).send('Failed to fetch image');
   }
 });
+
+// Route untuk meng-upload gambar ke Imgur
+app.post('/upload-image', async (req, res) => {
+  const { imageBase64 } = req.body;  // Gambar dalam format base64
+
+  try {
+    const response = await axios.post('https://api.imgur.com/3/image', {
+      image: imageBase64,
+      type: 'base64',
+    }, {
+      headers: {
+        Authorization: `Client-ID ${CLIENT_ID}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    // Pastikan response yang diterima benar
+    console.log('Imgur Response:', response.data);  // Log response Imgur
+
+    if (response.data && response.data.data.link) {
+      res.json({ link: response.data.data.link });
+    } else {
+      throw new Error('Failed to get link from Imgur response');
+    }
+  } catch (error) {
+    console.error('Error uploading image to Imgur:', error.message);
+    res.status(500).send('Failed to upload image');
+  }
+});
+
 
 app.listen(PORT, () => {
   console.log(`🚀 Proxy server is running at http://localhost:${PORT}`);
