@@ -7,23 +7,30 @@
         <option value="1x3">1x3 Layout</option>
         <option value="2x2">2x2 Layout</option>
       </select>
+    </div>
 
-      <label
-        v-for="option in filteredFrameOptions"
-        :key="option.value"
-        class="frame-option"
-        @click="selectedFrame = option.value"
-      >
-        <span>{{ option.label }}</span>
-        <div
-          :class="[
-            selectedLayout === '1x3' ? 'frame-preview-wrapper-1x3' : 'frame-preview-wrapper-2x2',
-            { selected: selectedFrame === option.value },
-          ]"
+    <div class="frame-options-container">
+      <div class="select-frame-header">
+        <h3>Select Frame</h3>
+      </div>
+
+      <div class="frame-options">
+        <label
+          v-for="option in filteredFrameOptions"
+          :key="option.value"
+          class="frame-option"
+          @click="selectedFrame = option.value"
         >
-          <img :src="option.value + '.jpg'" :alt="selectedLayout + ' Frame Preview'" />
-        </div>
-      </label>
+          <div
+            :class="[
+              selectedLayout === '1x3' ? 'frame-preview-wrapper-1x3' : 'frame-preview-wrapper-2x2',
+              { selected: selectedFrame === option.value },
+            ]"
+          >
+            <img :src="option.value + '.jpg'" :alt="selectedLayout + ' Frame Preview'" />
+          </div>
+        </label>
+      </div>
     </div>
 
     <div class="photo-grid">
@@ -44,9 +51,13 @@
     </div>
 
     <div v-if="collagePreview" class="collage-preview">
-      <h3>Collage Preview</h3>
-      <img :src="collagePreview" alt="Collage" />
-      <button @click="downloadCollage" class="download-btn">Download Collage</button>
+      <div>
+        <h3>Collage Preview</h3>
+        <img :src="collagePreview" alt="Collage" />
+      </div>
+      <div>
+        <button @click="downloadCollage" class="download-btn">Download Collage</button>
+      </div>
     </div>
 
     <div v-if="qrCodeDataUrl" class="qr-preview">
@@ -74,7 +85,7 @@ const selectedLayout = ref('1x3')
 
 const clientId = 'fabfda01b119459'
 const imgurLink = ref('')
-const imgurApiUrl = 'https://api.imgur.com/3/image'; // Imgur API URL
+const imgurApiUrl = 'https://api.imgur.com/3/image' // Imgur API URL
 const qrCodeDataUrl = ref('')
 
 const frameOptions1x3 = [
@@ -225,8 +236,8 @@ const generateCollage = async () => {
 }
 
 const downloadCollage = async () => {
-  const canvas = canvasRef.value;
-  const imageBase64 = canvas.toDataURL('image/png').split(',')[1]; // Ambil base64-nya
+  const canvas = canvasRef.value
+  const imageBase64 = canvas.toDataURL('image/png').split(',')[1] // Ambil base64-nya
 
   try {
     // Kirim gambar ke backend untuk di-upload ke Imgur
@@ -238,78 +249,133 @@ const downloadCollage = async () => {
       body: JSON.stringify({
         imageBase64,
       }),
-    });
+    })
 
     if (!response.ok) {
-      throw new Error('Failed to upload image to backend');
+      throw new Error('Failed to upload image to backend')
     }
 
-    const data = await response.json();
-    const imgurLink = data.link;
+    const data = await response.json()
+    const imgurLink = data.link
 
     if (imgurLink) {
-      console.log('Image uploaded to Imgur:', imgurLink);
+      console.log('Image uploaded to Imgur:', imgurLink)
       // Generate QR code untuk link gambar Imgur
-      qrCodeDataUrl.value = await QRCode.toDataURL(imgurLink);
-      console.log('QR Code generated');
+      qrCodeDataUrl.value = await QRCode.toDataURL(imgurLink)
+      console.log('QR Code generated')
     } else {
-      console.error('Failed to get image link from Imgur');
+      console.error('Failed to get image link from Imgur')
     }
   } catch (error) {
-    console.error('Error uploading image:', error.message);
+    console.error('Error uploading image:', error.message)
   }
-};
+}
 
 onMounted(loadSavedPhotos)
 </script>
 
-<style scoped>
+<style>
 /* Container styles */
 .gallery-container {
-  padding: 1rem;
+  padding: 1.5rem;
   max-width: 1200px;
   margin: auto;
+  background-color: #f7f7f7;
+  border-radius: 10px;
+  text-align: center;
 }
 
+/* Title styling */
+h2 {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 1.5rem;
+}
+
+/* Controls */
+.controls {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.controls select {
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* Frame options container */
+.frame-options-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 2rem;
+}
+
+/* Header for Select Frame */
+.select-frame-header {
+  margin-bottom: 1rem;
+}
+
+/* Frame options layout - Make sure options stay in a row */
 .frame-options {
   display: flex;
-  gap: 1rem;
-  align-items: flex-start;
-  margin-top: 1rem;
+  justify-content: center;
+  gap: 2rem;
+  flex-wrap: nowrap; /* Keep options in one line */
+  align-items: center;
 }
 
+/* Frame option styles */
 .frame-option {
   display: flex;
   flex-direction: column;
   align-items: center;
   cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.3s ease;
 }
 
-.frame-option .selected {
+.frame-option:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 15px rgba(79, 70, 229, 0.3);
+}
+
+.frame-option.selected {
   border: 3px solid #4f46e5;
   box-shadow: 0 0 10px rgba(79, 70, 229, 0.5);
 }
 
-.frame-option input[type='radio'] {
-  margin-bottom: 0.3rem;
+.frame-option span {
+  margin-top: 0.25rem;
+  font-size: 0.9rem;
+  color: #333;
 }
 
-.frame-preview-wrapper-1x3 {
-  display: inline-block;
-  margin: 10px;
-  width: 120px;
-  height: 360px;
-  overflow: hidden;
-  border-radius: 6px;
-}
-
+/* Frame preview wrapper styles */
+.frame-preview-wrapper-1x3,
 .frame-preview-wrapper-2x2 {
   display: inline-block;
   margin: 10px;
-  width: 240px;
-  height: 280px; /* 2x2 frame size */
-  overflow: hidden;
   border-radius: 6px;
+  overflow: hidden;
+}
+
+.frame-preview-wrapper-1x3 {
+  width: 120px;
+  height: 360px;
+}
+
+.frame-preview-wrapper-2x2 {
+  width: 240px;
+  height: 280px;
 }
 
 .frame-preview-wrapper-1x3 img,
@@ -319,28 +385,15 @@ onMounted(loadSavedPhotos)
   object-fit: cover;
 }
 
-.frame-option input[type='radio']:checked ~ .frame-preview-wrapper {
-  border-color: #4f46e5;
-}
-
-.frame-option span {
-  margin-top: 0.25rem;
-  font-size: 0.8rem;
-  text-align: center;
-}
-
-/* Controls and photo grid styles */
-.controls {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
+/* Photo grid styles */
 .photo-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 1rem;
+  justify-items: center;  /* This centers the photo items horizontally */
+  align-items: center;    /* This centers the photo items vertically */
+  margin-top: 2rem;
+  width: 100%;
 }
 
 /* Individual photo item styles */
@@ -348,7 +401,10 @@ onMounted(loadSavedPhotos)
   position: relative;
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.3s ease;
 }
 
 .photo-item img {
@@ -357,7 +413,50 @@ onMounted(loadSavedPhotos)
   object-fit: cover;
 }
 
-/* Download button styles */
+.photo-item:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.photo-item.selected {
+  outline: 3px solid #4f46e5;
+}
+
+/* Checkbox input styles */
+.photo-item input[type='checkbox'] {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  transform: scale(1.4);
+  background: white;
+  z-index: 1;
+}
+
+/* Collage preview styles */
+.collage-preview {
+  margin-top: 2rem;
+  text-align: center;
+}
+
+.collage-preview img {
+  max-width: 100%;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+/* QR code preview styles */
+.qr-preview {
+  margin-top: 2rem;
+  text-align: center;
+}
+
+.qr-preview img {
+  border: 2px solid #4f46e5;
+  padding: 10px;
+  border-radius: 8px;
+}
+
+/* Button styles */
 .download-btn {
   margin-top: 1rem;
   padding: 0.5rem 1.2rem;
@@ -372,30 +471,6 @@ onMounted(loadSavedPhotos)
 
 .download-btn:hover {
   background-color: #4338ca;
-}
-
-/* Checkbox input styles */
-.photo-item input[type='checkbox'] {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  transform: scale(1.3);
-  background: white;
-}
-
-.photo-item.selected {
-  outline: 3px solid #4f46e5;
-}
-
-/* Collage preview styles */
-.collage-preview {
-  margin-top: 2rem;
-  text-align: center;
-}
-
-.collage-preview img {
-  max-width: 100%;
-  border-radius: 8px;
 }
 
 /* Loading spinner styles */
@@ -420,16 +495,7 @@ onMounted(loadSavedPhotos)
   margin-top: 10px;
 }
 
-.qr-preview {
-  margin-top: 2rem;
-  text-align: center;
-}
-.qr-preview img {
-  border: 2px solid #4f46e5;
-  padding: 10px;
-  border-radius: 8px;
-}
-
+/* Keyframe for spinner animation */
 @keyframes spin {
   0% {
     transform: rotate(0deg);
