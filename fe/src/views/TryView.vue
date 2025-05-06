@@ -31,19 +31,6 @@
             <img v-if="generatedImage" :src="generatedImage" alt="Generated image" class="generated-image" />
           </div>
 
-          <!-- Add QR Code Section -->
-          <div v-if="showQRCode" class="qr-code-section">
-            <h3 class="section-title">Scan to Download</h3>
-            <img :src="qrCodeImage" alt="QR Code" class="qr-code-image" />
-            <p class="qr-code-text">Scan this QR code to download your generated image</p>
-          </div>
-
-          <!-- Add skin tone display -->
-          <div v-if="skinTone" class="skin-tone-info">
-            <h3 class="section-title">Detected Skin Tone</h3>
-            <p class="skin-tone-value">{{ skinTone }}</p>
-          </div>
-
           <!-- Age and Gender Selection -->
           <div v-if="!generatedImage && !isGenerating" class="age-gender-section">
             <h3 class="section-title">Tell us about yourself</h3>
@@ -159,7 +146,6 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import OpenAI from 'openai';
-import { FaceDetection } from '@mediapipe/face_detection';
 import QRCode from 'qrcode';
 
 const router = useRouter();
@@ -169,8 +155,6 @@ const cameraContainer = ref(null);
 const cameraActive = ref(false);
 const capturedImage = ref(null);
 const generatedImage = ref(null);
-const qrCodeImage = ref(null);
-const showQRCode = ref(false);
 const loadingState = ref('');
 const stream = ref(null);
 const timerActive = ref(false);
@@ -181,82 +165,77 @@ const selectedAge = ref(20);
 const selectedGender = ref('male');
 const showAgeGenderControls = ref(false);
 
-// Add new refs for caching and optimization
-const cachedAnalysis = ref(null);
-const isAnalyzing = ref(false);
-const optimizedImage = ref(null);
-
-const faceDetection = ref(null);
-const skinTone = ref(null);
-const skinToneCategories = [
-  { name: 'Very Light', range: [0, 0.2] },
-  { name: 'Light', range: [0.2, 0.4] },
-  { name: 'Medium', range: [0.4, 0.6] },
-  { name: 'Tan', range: [0.6, 0.8] },
-  { name: 'Dark', range: [0.8, 1.0] }
-];
+// Define the checkStorageQuota function
+const checkStorageQuota = async () => {
+  if ('storage' in navigator && 'estimate' in navigator.storage) {
+    const { usage, quota } = await navigator.storage.estimate();
+    console.log(`Using ${usage} out of ${quota} bytes.`);
+    return usage < quota;
+  }
+  return true; // Assume enough space if API is not available
+};
 
 // 💡 Optimized prompts
 const styles = [
   {
     id: 1,
     name: 'Artistic',
-    prompt: "Portrait of a person in cyberpunk digital art style, dramatic neon lighting (blue and magenta), futuristic techwear, high-contrast shadows, glowing effects, digital noise overlay, Blade Runner and Ghost in the Shell aesthetics"
+    prompt: "Digital art portrait with vibrant colors and modern aesthetic"
   },
   {
     id: 2,
     name: 'Vintage',
-    prompt: "Vintage comic book style portrait of a person, halftone print texture, bold outlines, retro color scheme, distressed ink effect, dramatic lighting, 1950s superhero poster aesthetic"
+    prompt: "Vintage style portrait with retro color scheme and classic look"
   },
   {
     id: 3,
     name: 'Anime',
-    prompt: "Highly stylized anime character portrait, big glossy eyes, spiky anime hair, cel-shaded skin tones, soft background gradients, glow effects, dramatic pose, inspired by Makoto Shinkai and Studio MAPPA"
+    prompt: "Anime style portrait with expressive features and artistic flair"
   },
   {
     id: 4,
     name: 'Oil Painting',
-    prompt: "Expressionist oil painting portrait of a person, bold impasto brush strokes, intense emotional color palette, visible canvas texture, dramatic shadows, Van Gogh self-portrait aesthetic"
+    prompt: "Oil painting style portrait with rich textures and artistic brushstrokes"
   },
   {
     id: 5,
     name: 'LEGO',
-    prompt: "LEGO minifigure character portrait, cylindrical head, yellow plastic skin, dot eyes, smiling face, classic LEGO hair, high-detail studio lighting, posed in front of LEGO brick background, toy photography style"
+    prompt: "Playful LEGO style portrait with simple geometric shapes"
   },
   {
     id: 6,
-    name: '16-Bit Pixel',
-    prompt: "16-bit pixel art RPG character portrait, blocky features, visible pixel grid, 1990s video game sprite style, limited color palette, fantasy background inspired by Chrono Trigger and Final Fantasy VI"
+    name: 'Pixel Art',
+    prompt: "Pixel art style portrait with retro gaming aesthetic"
   },
   {
     id: 7,
-    name: 'Pixar',
-    prompt: "3D Pixar-style animated character portrait, round expressive face, large glossy eyes, stylized hair, soft lighting, warm tones, cinematic cartoon feel, inspired by Turning Red and Up"
+    name: 'Cartoon',
+    prompt: "3D cartoon style portrait with vibrant colors and playful features"
   },
   {
     id: 8,
-    name: 'Minecraft',
-    prompt: "Minecraft character portrait in voxel art style, blocky geometry, pixel textures, simplified facial features, background filled with Minecraft blocks, torches, and floating items"
+    name: 'Block Art',
+    prompt: "Geometric block art style portrait with modern minimalist design"
   },
   {
     id: 9,
-    name: 'Van Gogh',
-    prompt: "Swirling Van Gogh style painted portrait, visible brushstrokes, vibrant complementary colors, dynamic background inspired by The Starry Night, expressive impressionist art style"
+    name: 'Painterly',
+    prompt: "Artistic painted portrait with expressive brushstrokes and rich colors"
   },
   {
     id: 10,
-    name: 'Manga',
-    prompt: "Black-and-white manga portrait, high-contrast linework, screentone effects, sharp eyes, speed lines, dramatic composition inspired by shonen manga like Naruto or Attack on Titan"
+    name: 'Comic',
+    prompt: "Comic book style portrait with bold lines and dynamic composition"
   },
   {
     id: 11,
-    name: 'Manhwa',
-    prompt: "Korean manhwa-style character portrait, clean digital line art, flawless glowing skin, glossy black hair, big sparkly eyes, subtle blush, fantasy webtoon aesthetic like Solo Leveling or True Beauty, sparkles and vertical composition"
+    name: 'Digital Art',
+    prompt: "Modern digital art portrait with clean lines and contemporary style"
   },
   {
     id: 12,
-    name: 'Royal Portrait',
-    prompt: "Fantasy royal portrait painting, ornate renaissance outfit, gold embroidery, gem-studded crown, dramatic studio lighting, grand throne room setting, detailed painterly style inspired by classic European royalty"
+    name: 'Classic',
+    prompt: "Classic portrait style with elegant composition and timeless appeal"
   }
 ];
 
@@ -266,78 +245,10 @@ const openai = new OpenAI({
   dangerouslyAllowBrowser: true
 });
 
-// Generate a unique ID for each photo
-const generateUniqueId = () => {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-};
-
-// Initialize face detection
-const initFaceDetection = async () => {
-  faceDetection.value = new FaceDetection({
-    locateFile: (file) => {
-      return `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`;
-    }
-  });
-
-  faceDetection.value.setOptions({
-    modelSelection: 0,
-    minDetectionConfidence: 0.5
-  });
-
-  await faceDetection.value.initialize();
-};
-
-// Analyze skin tone from image
-const analyzeSkinTone = async (imageData) => {
-  if (!faceDetection.value) {
-    await initFaceDetection();
-  }
-
-  const results = await faceDetection.value.send({ image: imageData });
-  
-  if (results.detections && results.detections.length > 0) {
-    const detection = results.detections[0];
-    const keypoints = detection.keypoints;
-    
-    // Get the average skin tone from the face region
-    const faceRegion = keypoints.slice(0, 6); // Use the first 6 keypoints for face region
-    let totalBrightness = 0;
-    
-    for (const point of faceRegion) {
-      const x = Math.round(point.x * imageData.width);
-      const y = Math.round(point.y * imageData.height);
-      const pixelIndex = (y * imageData.width + x) * 4;
-      
-      // Calculate brightness (average of RGB values)
-      const r = imageData.data[pixelIndex];
-      const g = imageData.data[pixelIndex + 1];
-      const b = imageData.data[pixelIndex + 2];
-      const brightness = (r + g + b) / 3 / 255; // Normalize to 0-1
-      
-      totalBrightness += brightness;
-    }
-    
-    const averageBrightness = totalBrightness / faceRegion.length;
-    
-    // Determine skin tone category
-    for (const category of skinToneCategories) {
-      if (averageBrightness >= category.range[0] && averageBrightness < category.range[1]) {
-        skinTone.value = category.name;
-        break;
-      }
-    }
-  }
-};
-
-// Start camera
 const startCamera = async () => {
   try {
     loadingState.value = 'Activating camera...';
-    stream.value = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user' },
-      audio: false
-    });
-    
+    stream.value = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
     if (videoElement.value) {
       videoElement.value.srcObject = stream.value;
       cameraActive.value = true;
@@ -346,18 +257,14 @@ const startCamera = async () => {
   } catch (error) {
     console.error('Error accessing camera:', error);
     loadingState.value = 'Camera access denied. Please check permissions.';
-    setTimeout(() => {
-      loadingState.value = '';
-    }, 3000);
+    setTimeout(() => loadingState.value = '', 3000);
   }
 };
 
-// Modify the capturePhoto function to include skin tone analysis
 const capturePhoto = async (timerSeconds) => {
   if (timerSeconds > 0) {
     timerActive.value = true;
     timerCount.value = timerSeconds;
-    
     const timer = setInterval(() => {
       timerCount.value--;
       if (timerCount.value <= 0) {
@@ -366,347 +273,127 @@ const capturePhoto = async (timerSeconds) => {
         takePhoto();
       }
     }, 1000);
-    return;
+  } else {
+    takePhoto();
   }
-  
-  takePhoto();
 };
 
 const takePhoto = async () => {
   if (!videoElement.value || !canvasElement.value) return;
-  
   const canvas = canvasElement.value;
   const video = videoElement.value;
-  
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
-  
   const ctx = canvas.getContext('2d');
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  
   capturedImage.value = canvas.toDataURL('image/jpeg');
-  
-  // Stop the camera
   if (stream.value) {
     stream.value.getTracks().forEach(track => track.stop());
     cameraActive.value = false;
   }
-  
-  // Analyze skin tone
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  await analyzeSkinTone(imageData);
 };
 
-// Add new function to optimize image size
 const optimizeImage = (imageData) => {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      
-      // Calculate new dimensions while maintaining aspect ratio
-      const maxDimension = 1024;
-      let width = img.width;
-      let height = img.height;
-      
-      if (width > height) {
-        if (width > maxDimension) {
-          height = Math.round((height * maxDimension) / width);
-          width = maxDimension;
-        }
-      } else {
-        if (height > maxDimension) {
-          width = Math.round((width * maxDimension) / height);
-          height = maxDimension;
-        }
+      let [width, height] = [img.width, img.height];
+      const maxDimension = 512; // Reduce max dimension for faster upload
+      if (width > height && width > maxDimension) {
+        height = Math.round(height * maxDimension / width);
+        width = maxDimension;
+      } else if (height > width && height > maxDimension) {
+        width = Math.round(width * maxDimension / height);
+        height = maxDimension;
       }
-      
       canvas.width = width;
       canvas.height = height;
       ctx.drawImage(img, 0, 0, width, height);
-      
-      // Convert to PNG with slightly reduced quality for faster processing
-      optimizedImage.value = canvas.toDataURL('image/png', 0.9);
-      resolve(optimizedImage.value);
+      resolve(canvas.toDataURL('image/jpeg', 0.7)); // Reduce quality for faster upload
     };
     img.src = imageData;
   });
 };
 
-// Add new function to start image analysis
-const startImageAnalysis = async () => {
-  if (!capturedImage.value || isAnalyzing.value) return;
-  
-  isAnalyzing.value = true;
-  loadingState.value = 'Analyzing image features...';
-  
-  try {
-    const analysis = await analyzeImageFeatures(optimizedImage.value || capturedImage.value);
-    cachedAnalysis.value = analysis;
-    console.log('Image Analysis Cached:', analysis);
-  } catch (error) {
-    console.error('Error in background analysis:', error);
-  } finally {
-    isAnalyzing.value = false;
-    loadingState.value = '';
-  }
-};
-
-// Retake photo
-const retakePhoto = () => {
-  capturedImage.value = null;
-  generatedImage.value = null;
-  cachedAnalysis.value = null;
-  optimizedImage.value = null;
-  showAgeGenderControls.value = false;
-  startCamera();
-};
-
-// Save photo to database (localStorage for demo)
-const savePhoto = () => {
-  if (!capturedImage.value) return;
-  
-  loadingState.value = 'Saving photo...';
-  
-  // Simulate processing delay
-  setTimeout(() => {
-    try {
-      const photoId = generateUniqueId();
-      const photoData = {
-        id: photoId,
-        image: capturedImage.value,
-        timestamp: new Date().toISOString()
-      };
-      
-      // Get existing photos from localStorage
-      const existingPhotos = JSON.parse(localStorage.getItem('selfies') || '[]');
-      existingPhotos.push(photoData);
-      
-      // Save to localStorage
-      localStorage.setItem('selfies', JSON.stringify(existingPhotos));
-      
-      loadingState.value = 'Photo saved successfully!';
-      
-      // Clear loading state after 2 seconds and ask if user wants to go to gallery
-      setTimeout(() => {
-        loadingState.value = '';
-        
-        // Ask user if they want to view the gallery or take another photo
-        if (confirm('Photo saved! Would you like to view your gallery?')) {
-          viewGallery();
-        } else {
-          capturedImage.value = null;
-          startCamera();
-        }
-      }, 2000);
-    } catch (error) {
-      console.error('Error saving photo:', error);
-      loadingState.value = 'Failed to save photo.';
-      
-      setTimeout(() => {
-        loadingState.value = '';
-      }, 2000);
-    }
-  }, 1500);
-};
-
-// Navigate to gallery page
-const viewGallery = () => {
-  router.push('/gallery');
-};
-
-// Update the analyzeImageFeatures function with a simpler prompt
-const analyzeImageFeatures = async (imageData) => {
-  try {
-    loadingState.value = 'Analyzing image features...';
-    
-    // Ensure the image data is properly formatted
-    const base64Image = imageData.split(',')[1];
-    
-    // Call OpenAI Vision API with GPT-4 Vision Preview
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: "gpt-4-turbo",
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Briefly describe the person's key features in this format: [hair color/style], [eye color], [facial features], [clothing color/style]. Keep it concise."
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:image/png;base64,${base64Image}`,
-                  detail: "low" // Reduced detail level for faster processing
-                }
-              }
-            ]
-          }
-        ],
-        max_tokens: 150, // Reduced token limit
-        temperature: 0.3 // Lower temperature for more consistent results
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('API Error:', errorData);
-      throw new Error(errorData.error?.message || 'Failed to analyze image');
-    }
-
-    const result = await response.json();
-    console.log('Analysis Result:', result);
-    
-    if (!result.choices || !result.choices[0] || !result.choices[0].message) {
-      throw new Error('Invalid response format from API');
-    }
-    
-    return result.choices[0].message.content;
-  } catch (error) {
-    console.error('Error analyzing image:', error);
-    throw error;
-  }
-};
-
-// Update generateImage function to use cached analysis
 const generateImage = async (stylePrompt) => {
   if (!capturedImage.value) return;
-
   isGenerating.value = true;
   loadingState.value = 'Preparing image...';
-
   try {
-    // Use cached analysis if available, otherwise analyze now
-    let imageAnalysis = cachedAnalysis.value;
-    if (!imageAnalysis) {
-      imageAnalysis = await analyzeImageFeatures(optimizedImage.value || capturedImage.value);
-    }
-
-    // Combine the style prompt with the analyzed features and user demographics
-    const enhancedPrompt = `${stylePrompt}. Use these specific features from the original image: ${imageAnalysis}. The person is a ${selectedAge.value} year old ${selectedGender.value}. Maintain the person's unique characteristics while applying the requested style. Ensure the generated image preserves the key facial features, hair style, and clothing details from the original. Focus on maintaining the person's identity while applying the artistic style.`;
-
-    loadingState.value = 'Generating styled image...';
-
-    // Call DALL-E 3 API with the enhanced prompt
-    const response = await fetch('https://api.openai.com/v1/images/generations', {
+    const inputImage = await optimizeImage(capturedImage.value);
+    const base64Data = inputImage.split(',')[1];
+    const binaryData = atob(base64Data);
+    const bytes = new Uint8Array(binaryData.length);
+    for (let i = 0; i < binaryData.length; i++) bytes[i] = binaryData.charCodeAt(i);
+    const imageBlob = new Blob([bytes], { type: 'image/png' });
+    const formData = new FormData();
+    formData.append('image', imageBlob, 'photo.png');
+    formData.append('prompt', `${stylePrompt}`);
+    formData.append('model', 'gpt-image-1');
+    formData.append('n', 1);
+    formData.append('size', '1024x1024');
+    const response = await fetch('https://api.openai.com/v1/images/edits', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: "dall-e-3",
-        prompt: enhancedPrompt,
-        n: 1,
-        size: "1024x1024",
-        quality: "standard",
-        style: "vivid"
-      })
+      headers: { 'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}` },
+      body: formData
     });
-
     if (!response.ok) {
       const error = await response.json();
-      console.error('DALL-E Error:', error);
       throw new Error(error.error?.message || 'Failed to generate image');
     }
-
     const result = await response.json();
-    generatedImage.value = result.data[0].url;
+    const base64Image = result.data[0].b64_json;
+    generatedImage.value = `data:image/png;base64,${base64Image}`;
+    console.log('API Response:', result);
     loadingState.value = 'Image generated successfully!';
   } catch (err) {
-    console.error('Error details:', err);
+    console.error('Error during generation:', err);
     loadingState.value = `Failed to generate image: ${err.message}`;
   } finally {
     isGenerating.value = false;
-    setTimeout(() => {
-      loadingState.value = '';
-    }, 3000);
+    setTimeout(() => loadingState.value = '', 3000);
   }
 };
 
-// Save generated photo
-const saveGeneratedPhoto = () => {
-  if (!generatedImage.value) return;
-  
-  loadingState.value = 'Saving generated photo...';
-  
-  setTimeout(() => {
-    try {
-      const photoId = generateUniqueId();
-      const photoData = {
-        id: photoId,
-        image: generatedImage.value,
-        timestamp: new Date().toISOString(),
-        isGenerated: true
-      };
-      
-      const existingPhotos = JSON.parse(localStorage.getItem('selfies') || '[]');
-      existingPhotos.push(photoData);
-      
-      localStorage.setItem('selfies', JSON.stringify(existingPhotos));
-      
-      loadingState.value = 'Generated photo saved successfully!';
-      
-      // Generate QR code automatically after saving
-      generateQRCode();
-      
-      setTimeout(() => {
-        loadingState.value = '';
-        if (confirm('Generated photo saved! Would you like to view your gallery?')) {
-          viewGallery();
-        }
-      }, 2000);
-    } catch (error) {
-      console.error('Error saving generated photo:', error);
-      loadingState.value = 'Failed to save generated photo.';
-      
-      setTimeout(() => {
-        loadingState.value = '';
-      }, 2000);
-    }
-  }, 1500);
+const viewGallery = () => router.push('/gallery');
+const retakePhoto = () => {
+  capturedImage.value = null;
+  generatedImage.value = null;
+  startCamera();
 };
-
-// Add new function to generate QR code
-const generateQRCode = async () => {
+const saveGeneratedPhoto = async () => {
   if (!generatedImage.value) return;
-  
-  try {
-    loadingState.value = 'Generating QR code...';
-    const qrCodeDataUrl = await QRCode.toDataURL(generatedImage.value, {
-      width: 400,
-      margin: 2,
-      color: {
-        dark: '#1e40af',
-        light: '#ffffff'
-      }
-    });
-    qrCodeImage.value = qrCodeDataUrl;
-    showQRCode.value = true;
-    loadingState.value = '';
-  } catch (error) {
-    console.error('Error generating QR code:', error);
-    loadingState.value = 'Failed to generate QR code';
-    setTimeout(() => {
-      loadingState.value = '';
-    }, 3000);
+
+  // Optimize the generated image before saving
+  const optimizedImage = await optimizeImage(generatedImage.value);
+
+  const hasSpace = await checkStorageQuota();
+  if (!hasSpace) {
+    alert('Storage quota exceeded. Please clear some space.');
+    return;
   }
+
+  const photoData = {
+    id: Date.now().toString(36),
+    image: optimizedImage, // Use the optimized image
+    timestamp: new Date().toISOString(),
+    isGenerated: true
+  };
+  const existingPhotos = JSON.parse(localStorage.getItem('selfies') || '[]');
+  
+  // Limit the number of saved photos
+  if (existingPhotos.length >= 10) {
+    existingPhotos.shift(); // Remove the oldest photo
+  }
+  
+  existingPhotos.push(photoData);
+  localStorage.setItem('selfies', JSON.stringify(existingPhotos));
 };
 
-onMounted(() => {
-  // No need to load saved photos here anymore as they're on a different page
-});
-
+onMounted(() => {});
 onUnmounted(() => {
-  // Clean up camera stream when component is destroyed
   if (stream.value) {
     stream.value.getTracks().forEach(track => track.stop());
   }
@@ -1406,84 +1093,5 @@ onUnmounted(() => {
   font-size: 1.2rem;
   color: #4b5563;
   margin-top: 0.5rem;
-}
-
-/* Add QR Code Styles */
-.qr-code-section {
-  width: 100%;
-  max-width: 400px;
-  margin: 1.5rem auto;
-  padding: 1.5rem;
-  background: white;
-  border-radius: 20px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-  text-align: center;
-}
-
-.qr-code-image {
-  width: 100%;
-  max-width: 300px;
-  height: auto;
-  margin: 1rem auto;
-  border-radius: 12px;
-  padding: 1rem;
-  background: white;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.qr-code-text {
-  color: #475569;
-  font-size: 0.95rem;
-  margin-top: 0.5rem;
-}
-
-.qr-btn {
-  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
-  color: white;
-  border: none;
-  padding: 0.875rem 2rem;
-  border-radius: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  font-size: 1rem;
-  min-width: 160px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-}
-
-.qr-btn:hover {
-  background: linear-gradient(135deg, #7c3aed, #5b21b6);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.25);
-}
-
-/* Responsive styles for QR code */
-@media (max-width: 768px) {
-  .qr-code-section {
-    padding: 1rem;
-    margin: 1rem auto;
-  }
-  
-  .qr-code-image {
-    max-width: 250px;
-  }
-  
-  .qr-code-text {
-    font-size: 0.9rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .qr-code-section {
-    padding: 0.875rem;
-  }
-  
-  .qr-code-image {
-    max-width: 200px;
-  }
-  
-  .qr-code-text {
-    font-size: 0.85rem;
-  }
 }
 </style>

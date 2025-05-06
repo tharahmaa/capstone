@@ -54,6 +54,8 @@
       <img :src="qrCodeDataUrl" alt="QR Code" style="max-width: 300px" />
     </div>
 
+    <button @click="clearSavedPhotos" class="clear-btn">Clear Saved Photos</button>
+
     <canvas ref="canvasRef" style="display: none"></canvas>
   </div>
 </template>
@@ -138,98 +140,92 @@ const getBase64FromProxy = async (imageUrl) => {
   }
 }
 
+const loadImage = (src) => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+};
+
 const generateCollage = async () => {
-  isLoading.value = true
+  isLoading.value = true;
 
-  const frameImage = new Image()
-  let collageWidth = 1210
-  let collageHeight = 1410
-  let photoPadding = 50
-  let photoSize = 500
-  let positions = []
+  const frameImage = new Image();
+  let collageWidth = 1210;
+  let collageHeight = 1410;
+  let photoPadding = 50;
+  let photoSize = 500;
+  let positions = [];
 
-  const is2x2 = selectedLayout.value === '2x2'
-  const framePath = `${selectedFrame.value}.jpg`
-  frameImage.src = framePath
+  const is2x2 = selectedLayout.value === '2x2';
+  const framePath = `${selectedFrame.value}.jpg`;
+  frameImage.src = framePath;
 
   if (!is2x2) {
-    collageWidth = 590
-    collageHeight = 1770
-    photoSize = collageWidth * 0.8
-    let y = 50
+    collageWidth = 590;
+    collageHeight = 1770;
+    photoSize = collageWidth * 0.8;
+    let y = 50;
     for (let i = 0; i < 3; i++) {
-      positions.push({ x: (collageWidth - photoSize) / 2, y })
-      y += photoSize + photoPadding
+      positions.push({ x: (collageWidth - photoSize) / 2, y });
+      y += photoSize + photoPadding;
     }
   } else {
-    collageWidth = 800
-    collageHeight = 1000
-    photoSize = (collageWidth - 3 * 80) / 2
+    collageWidth = 800;
+    collageHeight = 1000;
+    photoSize = (collageWidth - 3 * 80) / 2;
     positions = [
       { x: 80, y: 80 },
       { x: 80 + photoSize + 50, y: 80 },
       { x: 80, y: 80 + photoSize + 50 },
       { x: 80 + photoSize + 50, y: 80 + photoSize + 50 },
-    ]
+    ];
   }
 
-  await new Promise((resolve) => {
-    frameImage.onload = resolve
-    frameImage.onerror = resolve
-  })
+  await new Promise((resolve, reject) => {
+    frameImage.onload = resolve;
+    frameImage.onerror = reject;
+  });
 
   const imagePromises = selectedPhotos.value.map((photo) =>
-    getBase64FromProxy(photo.image).then((base64) => {
-      if (base64) {
-        const img = new Image()
-        img.src = base64
-        return new Promise((resolve) => {
-          img.onload = () => resolve(img)
-          img.onerror = () => resolve(null)
-        })
-      }
-    }),
-  )
+    loadImage(photo.image).then((img) => img)
+  );
 
-  const loadedImages = (await Promise.all(imagePromises)).filter((img) => img !== null)
+  const loadedImages = await Promise.all(imagePromises);
 
-  if (!loadedImages.length || !frameImage.complete) {
-    isLoading.value = false
-    return
-  }
-
-  const canvas = canvasRef.value
-  const ctx = canvas.getContext('2d')
-  canvas.width = collageWidth
-  canvas.height = collageHeight
-  ctx.clearRect(0, 0, collageWidth, collageHeight)
-  ctx.drawImage(frameImage, 0, 0, collageWidth, collageHeight)
+  const canvas = canvasRef.value;
+  const ctx = canvas.getContext('2d');
+  canvas.width = collageWidth;
+  canvas.height = collageHeight;
+  ctx.clearRect(0, 0, collageWidth, collageHeight);
+  ctx.drawImage(frameImage, 0, 0, collageWidth, collageHeight);
 
   loadedImages.forEach((img, i) => {
     if (positions[i]) {
-      const { x, y } = positions[i]
-      ctx.drawImage(img, x, y, photoSize, photoSize)
+      const { x, y } = positions[i];
+      ctx.drawImage(img, x, y, photoSize, photoSize);
     }
-  })
+  });
 
-  const previewCanvas = document.createElement('canvas')
-  const previewCtx = previewCanvas.getContext('2d')
-  const previewWidth = 300
-  const previewHeight = Math.floor((collageHeight / collageWidth) * previewWidth)
-  previewCanvas.width = previewWidth
-  previewCanvas.height = previewHeight
-  previewCtx.drawImage(canvas, 0, 0, collageWidth, collageHeight, 0, 0, previewWidth, previewHeight)
+  const previewCanvas = document.createElement('canvas');
+  const previewCtx = previewCanvas.getContext('2d');
+  const previewWidth = 300;
+  const previewHeight = Math.floor((collageHeight / collageWidth) * previewWidth);
+  previewCanvas.width = previewWidth;
+  previewCanvas.height = previewHeight;
+  previewCtx.drawImage(canvas, 0, 0, collageWidth, collageHeight, 0, 0, previewWidth, previewHeight);
 
-  collagePreview.value = previewCanvas.toDataURL('image/png')
-  isLoading.value = false
-}
+  collagePreview.value = previewCanvas.toDataURL('image/png');
+  isLoading.value = false;
+};
 
 const downloadCollage = async () => {
   const canvas = canvasRef.value;
-  const imageBase64 = canvas.toDataURL('image/png').split(',')[1]; // Ambil base64-nya
+  const imageBase64 = canvas.toDataURL('image/png').split(',')[1];
 
   try {
-    // Kirim gambar ke backend untuk di-upload ke Imgur
     const response = await fetch('http://localhost:3000/upload-image', {
       method: 'POST',
       headers: {
@@ -249,7 +245,6 @@ const downloadCollage = async () => {
 
     if (imgurLink) {
       console.log('Image uploaded to Imgur:', imgurLink);
-      // Generate QR code untuk link gambar Imgur
       qrCodeDataUrl.value = await QRCode.toDataURL(imgurLink);
       console.log('QR Code generated');
     } else {
@@ -258,6 +253,98 @@ const downloadCollage = async () => {
   } catch (error) {
     console.error('Error uploading image:', error.message);
   }
+};
+
+const checkStorageQuota = async () => {
+  if ('storage' in navigator && 'estimate' in navigator.storage) {
+    const { usage, quota } = await navigator.storage.estimate();
+    console.log(`Using ${usage} out of ${quota} bytes.`);
+    return usage < quota;
+  }
+  return true; // Assume enough space if API is not available
+};
+
+const saveGeneratedPhoto = async () => {
+  if (!generatedImage.value) return;
+  
+  const hasSpace = await checkStorageQuota();
+  if (!hasSpace) {
+    alert('Storage quota exceeded. Please clear some space.');
+    return;
+  }
+
+  const photoData = {
+    id: Date.now().toString(36),
+    image: generatedImage.value,
+    timestamp: new Date().toISOString(),
+    isGenerated: true
+  };
+  const existingPhotos = JSON.parse(localStorage.getItem('selfies') || '[]');
+  
+  // Limit the number of saved photos
+  if (existingPhotos.length >= 10) {
+    existingPhotos.shift(); // Remove the oldest photo
+  }
+  
+  existingPhotos.push(photoData);
+  localStorage.setItem('selfies', JSON.stringify(existingPhotos));
+  generateQRCode();
+};
+
+const clearSavedPhotos = () => {
+  localStorage.removeItem('selfies');
+  console.log('All saved photos have been deleted.');
+};
+
+// Example of using IndexedDB to store images
+const openDatabase = () => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('imageDatabase', 1);
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      db.createObjectStore('images', { keyPath: 'id' });
+    };
+    request.onsuccess = (event) => resolve(event.target.result);
+    request.onerror = (event) => reject(event.target.error);
+  });
+};
+
+const saveImageToIndexedDB = async (imageData) => {
+  const db = await openDatabase();
+  const transaction = db.transaction('images', 'readwrite');
+  const store = transaction.objectStore('images');
+  const imageRecord = {
+    id: Date.now().toString(36),
+    image: imageData,
+    timestamp: new Date().toISOString(),
+  };
+  store.add(imageRecord);
+  transaction.oncomplete = () => console.log('Image saved to IndexedDB');
+  transaction.onerror = (event) => console.error('Error saving image:', event.target.error);
+};
+
+const optimizeImage = (imageData) => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      let [width, height] = [img.width, img.height];
+      const maxDimension = 512; // Reduce max dimension for faster upload
+      if (width > height && width > maxDimension) {
+        height = Math.round(height * maxDimension / width);
+        width = maxDimension;
+      } else if (height > width && height > maxDimension) {
+        width = Math.round(width * maxDimension / height);
+        height = maxDimension;
+      }
+      canvas.width = width;
+      canvas.height = height;
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', 0.7)); // Reduce quality for faster upload
+    };
+    img.src = imageData;
+  });
 };
 
 onMounted(loadSavedPhotos)
@@ -437,5 +524,25 @@ onMounted(loadSavedPhotos)
   100% {
     transform: rotate(360deg);
   }
+}
+
+.clear-btn {
+  background: linear-gradient(135deg, #f87171, #ef4444);
+  color: white;
+  border: none;
+  padding: 0.875rem 2rem;
+  border-radius: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 1rem;
+  min-width: 160px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.clear-btn:hover {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.25);
 }
 </style>
