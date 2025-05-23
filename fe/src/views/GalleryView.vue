@@ -187,12 +187,17 @@ const generateCollage = async () => {
     collageWidth = 800;
     collageHeight = 1000;
     photoSize = (collageWidth - 3 * 80) / 2;
+    const totalWidth = photoSize * 2 + 80; // Lebar total dua foto + padding
+    const totalHeight = photoSize * 2 + 80; // Tinggi total dua foto + padding
+
+    const startX = (collageWidth - totalWidth) / 2; // Posisi X untuk memulai foto pertama di tengah
+    const startY = (collageHeight - totalHeight) / 2; // Posisi Y untuk memulai foto pertama di tengah
     positions = [
-      { x: 80, y: 80 },
-      { x: 80 + photoSize + 50, y: 80 },
-      { x: 80, y: 80 + photoSize + 50 },
-      { x: 80 + photoSize + 50, y: 80 + photoSize + 50 },
-    ];
+      { x: startX, y: startY }, // Foto pertama
+      { x: startX + photoSize + 50, y: startY }, // Foto kedua
+      { x: startX, y: startY + photoSize + 50 }, // Foto ketiga
+      { x: startX + photoSize + 50, y: startY + photoSize + 50 }, // Foto keempat
+    ]
   }
 
   await new Promise((resolve, reject) => {
