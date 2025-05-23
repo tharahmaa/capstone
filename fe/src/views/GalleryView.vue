@@ -7,6 +7,7 @@
         <option value="1x3">1x3 Layout</option>
         <option value="2x2">2x2 Layout</option>
       </select>
+      <button @click="clearSavedPhotos" class="clear-btn">Clear All Photos</button>
     </div>
 
     <div class="frame-options-container">
@@ -42,6 +43,7 @@
       >
         <img :src="photo.image" alt="Saved" />
         <input type="checkbox" :value="photo" v-model="selectedPhotos" />
+        <button class="delete-btn" @click="deletePhoto(index)">×</button>
       </div>
     </div>
 
@@ -64,8 +66,6 @@
       <h3>Scan QR to download your collage!</h3>
       <img :src="qrCodeDataUrl" alt="QR Code" style="max-width: 300px" />
     </div>
-
-    <button @click="clearSavedPhotos" class="clear-btn">Clear Saved Photos</button>
 
     <canvas ref="canvasRef" style="display: none"></canvas>
   </div>
@@ -304,6 +304,10 @@ const saveGeneratedPhoto = async () => {
 
 const clearSavedPhotos = () => {
   localStorage.removeItem('selfies');
+  savedPhotos.value = [];
+  selectedPhotos.value = [];
+  collagePreview.value = '';
+  qrCodeDataUrl.value = '';
   console.log('All saved photos have been deleted.');
 };
 
@@ -356,6 +360,13 @@ const optimizeImage = (imageData) => {
     };
     img.src = imageData;
   });
+};
+
+const deletePhoto = (index) => {
+  const photoToDelete = savedPhotos.value[index];
+  savedPhotos.value = savedPhotos.value.filter((_, i) => i !== index);
+  selectedPhotos.value = selectedPhotos.value.filter(photo => photo !== photoToDelete);
+  localStorage.setItem('selfies', JSON.stringify(savedPhotos.value));
 };
 
 onMounted(loadSavedPhotos)
@@ -596,13 +607,12 @@ h2 {
   background: linear-gradient(135deg, #f87171, #ef4444);
   color: white;
   border: none;
-  padding: 0.875rem 2rem;
-  border-radius: 14px;
+  padding: 0.5rem 1.2rem;
+  border-radius: 8px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-size: 1rem;
-  min-width: 160px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
 }
 
@@ -610,5 +620,30 @@ h2 {
   background: linear-gradient(135deg, #dc2626, #b91c1c);
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(239, 68, 68, 0.25);
+}
+
+/* Delete button styles */
+.delete-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: rgba(239, 68, 68, 0.9);
+  color: white;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+  z-index: 2;
+}
+
+.delete-btn:hover {
+  background-color: rgb(220, 38, 38);
 }
 </style>
